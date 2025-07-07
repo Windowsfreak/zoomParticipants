@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 var (
