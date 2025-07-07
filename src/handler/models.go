@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"sync"
 	"time"
 )
@@ -33,6 +34,8 @@ type MeetingData struct {
 
 // AppState holds the application state with thread-safe access
 type AppState struct {
-	Meetings map[string]*MeetingData // Key: Meeting UUID
-	Mutex    sync.RWMutex
+	Meetings            map[string]map[string]*MeetingData // Key: AccountID -> Meeting UUID -> MeetingData
+	PasswordToAccountID map[string]string                  // Key: ViewerPassword -> AccountID
+	Mutex               sync.RWMutex
+	DB                  *sql.DB
 }

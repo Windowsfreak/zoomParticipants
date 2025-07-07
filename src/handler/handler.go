@@ -3,8 +3,10 @@ package handler
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -20,45 +22,14 @@ import (
 
 var (
 	appState = &AppState{
-		Meetings: make(map[string]*MeetingData),
+		Meetings:            make(map[string]map[string]*MeetingData),
+		PasswordToAccountID: make(map[string]string),
 	}
 	tmpl *template.Template
 )
 
 // init parses the HTML template for the participant list page
 func init() {
-	appState.Meetings["example-meeting-uuid"] = &MeetingData{
-		Participants: map[string]string{
-			"11223":  "Alice Johnson",
-			"44556":  "Bob Brown",
-			"77889":  "Charlie Black",
-			"99000":  "Diana White",
-			"33445":  "Eve Green",
-			"55667":  "Frank Blue",
-			"88990":  "Grace Yellow",
-			"12321":  "Hank Purple",
-			"45654":  "Ivy Orange",
-			"78987":  "Jack Pink",
-			"10101":  "Kathy Cyan",
-			"20202":  "Leo Magenta",
-			"30303":  "Mia Teal",
-			"40404":  "Nina Brown",
-			"50505":  "Oscar Gray",
-			"60606":  "Paul Silver",
-			"70707":  "Quinn Gold",
-			"80808":  "Rita Bronze",
-			"90909":  "Sam White",
-			"101010": "Tina Black",
-			"111111": "Uma Red",
-			"121212": "Vera Blue",
-			"131313": "Will Green",
-			"141414": "Xena Yellow",
-			"151515": "Yara Pink",
-			"161616": "Zane Purple",
-		},
-		Topic:       "Example Meeting",
-		LastUpdated: time.Now(),
-	}
 	html := `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -159,6 +130,17 @@ func init() {
             padding: 10px 20px;
             cursor: pointer;
         }
+		.add-account-form {
+			text-align: center;
+			margin-top: 20px;
+		}
+		.add-account-form div {
+			margin-bottom: 10px;
+		}
+		.add-account-form input {
+			padding: 5px;
+			width: 250px;
+		}
     </style>
 </head>
 <body>
@@ -211,6 +193,27 @@ func init() {
                     <button type="submit">Absenden</button>
                 </form>
             </div>
+			<div class="add-account-form">
+				<h3>Add New Account</h3>
+				<form method="POST" action="/add-account">
+					<div>
+						<label for="account_id">Account ID:</label>
+						<input type="text" id="account_id" name="account_id" required>
+					</div>
+					<div>
+						<label for="secret_token">Secret Token (min 15 chars):</label>
+						<input type="password" id="secret_token" name="secret_token" required minlength="15">
+					</div>
+					<div>
+						<label for="viewer_password">Viewer Password (min 15 chars, unique):</label>
+						<input type="password" id="viewer_password" name="viewer_password" required minlength="15">
+					</div>
+					<button type="submit">Add Account</button>
+					{{ if .ErrorMessage }}
+						<p style="color: red;">{{ .ErrorMessage }}</p>
+					{{ end }}
+				</form>
+			</div>
         {{ end }}
     </div>
 </body>
@@ -222,11 +225,35 @@ func init() {
 	}
 }
 
+func InitDB(dbPath string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %v", err)
+	}
+
+	createTableSQL := `
+    CREATE TABLE IF NOT EXISTS accounts (
+        account_id TEXT PRIMARY KEY,
+        secret_token TEXT NOT NULL,
+        viewer_password TEXT NOT NULL UNIQUE
+    );`
+	_, err = db.Exec(createTableSQL)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to create table: %v", err)
+	}
+
+	appState.DB = db
+
+	return db, nil
+}
+
 func NewServer() *http.Server {
 	r := httprouter.New()
 	r.POST("/webhook", WebhookHandler)
 	r.GET("/", ViewParticipantsHandler)
 	r.POST("/", ViewParticipantsHandler)
+	r.POST("/add-account", addAccountHandler)
 
 	// Start cleanup routine
 	go cleanupOldMeetings()
@@ -266,8 +293,23 @@ func validateWebhookSignature(r *http.Request, secretToken string) bool {
 
 // handleWebhookValidation handles Zoom's endpoint URL validation challenge
 func handleWebhookValidation(w http.ResponseWriter, r *http.Request, payload ZoomWebhookPayload) {
+	accountID := payload.Payload.AccountID
+
+	// Retrieve the secret token from the database for this account
+	var secretToken string
+	err := appState.DB.QueryRow("SELECT secret_token FROM accounts WHERE account_id = ?", accountID).Scan(&secretToken)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "Unknown account", http.StatusUnauthorized)
+		log.Printf("No secret token found for account: %s during validation", accountID)
+		return
+	} else if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		log.Printf("Database error retrieving secret token for account %s: %v", accountID, err)
+		return
+	}
+
 	plainToken := payload.Payload.PlainToken
-	h := hmac.New(sha256.New, []byte(ConfigInstance.WebhookSecretToken))
+	h := hmac.New(sha256.New, []byte(secretToken))
 	h.Write([]byte(plainToken))
 	encryptedToken := hex.EncodeToString(h.Sum(nil))
 
@@ -276,15 +318,12 @@ func handleWebhookValidation(w http.ResponseWriter, r *http.Request, payload Zoo
 		"encryptedToken": encryptedToken,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(response)
-	if err != nil {
-		http.Error(w, "Error encoding response", http.StatusInternalServerError)
-		log.Printf("Error encoding webhook validation response: %v", err)
-	}
+	json.NewEncoder(w).Encode(response)
+	log.Printf("Webhook validation successful for account: %s", accountID)
 }
 
 // handleParticipantJoined adds a participant to the meeting data
-func handleParticipantJoined(payload ZoomWebhookPayload) {
+func handleParticipantJoined(payload ZoomWebhookPayload, accountID string) {
 	meetingUUID := payload.Payload.Object.UUID
 	participant := payload.Payload.Object.Participant
 	uniqueID := participant.UserID
@@ -299,22 +338,22 @@ func handleParticipantJoined(payload ZoomWebhookPayload) {
 	appState.Mutex.Lock()
 	defer appState.Mutex.Unlock()
 
-	if _, exists := appState.Meetings[meetingUUID]; !exists {
-		appState.Meetings[meetingUUID] = &MeetingData{
+	if _, exists := appState.Meetings[accountID][meetingUUID]; !exists {
+		appState.Meetings[accountID][meetingUUID] = &MeetingData{
 			Participants: make(map[string]string),
 			Topic:        payload.Payload.Object.Topic,
 			LastUpdated:  time.Now(),
 		}
 	}
 
-	meeting := appState.Meetings[meetingUUID]
+	meeting := appState.Meetings[accountID][meetingUUID]
 	meeting.Participants[uniqueID] = displayName
 	meeting.LastUpdated = time.Now()
 	log.Printf("Participant joined: %s in meeting %s", displayName, meetingUUID)
 }
 
 // handleParticipantLeft removes a participant from the meeting data
-func handleParticipantLeft(payload ZoomWebhookPayload) {
+func handleParticipantLeft(payload ZoomWebhookPayload, accountID string) {
 	meetingUUID := payload.Payload.Object.UUID
 	participant := payload.Payload.Object.Participant
 	uniqueID := participant.UserID
@@ -325,7 +364,7 @@ func handleParticipantLeft(payload ZoomWebhookPayload) {
 	appState.Mutex.Lock()
 	defer appState.Mutex.Unlock()
 
-	if meeting, exists := appState.Meetings[meetingUUID]; exists {
+	if meeting, exists := appState.Meetings[accountID][meetingUUID]; exists {
 		delete(meeting.Participants, uniqueID)
 		meeting.LastUpdated = time.Now()
 		log.Printf("Participant left: %s from meeting %s", participant.UserName, meetingUUID)
@@ -333,13 +372,13 @@ func handleParticipantLeft(payload ZoomWebhookPayload) {
 }
 
 // handleMeetingEnded clears all participants when the meeting ends
-func handleMeetingEnded(payload ZoomWebhookPayload) {
+func handleMeetingEnded(payload ZoomWebhookPayload, accountID string) {
 	meetingUUID := payload.Payload.Object.UUID
 
 	appState.Mutex.Lock()
 	defer appState.Mutex.Unlock()
 
-	if meeting, exists := appState.Meetings[meetingUUID]; exists {
+	if meeting, exists := appState.Meetings[accountID][meetingUUID]; exists {
 		meeting.Participants = make(map[string]string)
 		meeting.LastUpdated = time.Now()
 		log.Printf("Meeting ended: %s", meetingUUID)
@@ -351,10 +390,12 @@ func cleanupOldMeetings() {
 	for {
 		time.Sleep(time.Hour)
 		appState.Mutex.Lock()
-		for uuid, meeting := range appState.Meetings {
-			if time.Since(meeting.LastUpdated) > 6*time.Hour {
-				delete(appState.Meetings, uuid)
-				log.Printf("Cleaned up old meeting: %s", uuid)
+		for _, meetings := range appState.Meetings {
+			for uuid, meeting := range meetings {
+				if time.Since(meeting.LastUpdated) > 6*time.Hour {
+					delete(appState.Meetings, uuid)
+					log.Printf("Cleaned up old meeting: %s", uuid)
+				}
 			}
 		}
 		appState.Mutex.Unlock()
@@ -363,12 +404,6 @@ func cleanupOldMeetings() {
 
 // WebhookHandler processes incoming Zoom webhook events
 func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	if !validateWebhookSignature(r, ConfigInstance.WebhookSecretToken) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		log.Println("Webhook signature validation failed")
-		return
-	}
-
 	var payload ZoomWebhookPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Invalid payload", http.StatusBadRequest)
@@ -376,17 +411,50 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 		return
 	}
 
+	accountID := payload.Payload.AccountID
+	var secretToken string
+	err := appState.DB.QueryRow("SELECT secret_token FROM accounts WHERE account_id = ?", accountID).Scan(&secretToken)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Unknown account", http.StatusUnauthorized)
+		log.Printf("No account found for ID: %s", accountID)
+		return
+	} else if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		log.Printf("Database error for account %s: %v", accountID, err)
+		return
+	}
+
+	if !validateWebhookSignature(r, secretToken) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		log.Printf("Webhook signature validation failed for account: %s", accountID)
+		return
+	}
+
+	appState.Mutex.Lock()
+	if _, exists := appState.Meetings[accountID]; !exists {
+		appState.Meetings[accountID] = make(map[string]*MeetingData)
+		// Fetch viewer password to populate PasswordToAccountID map
+		var viewerPassword string
+		err := appState.DB.QueryRow("SELECT viewer_password FROM accounts WHERE account_id = ?", accountID).Scan(&viewerPassword)
+		if err == nil {
+			appState.PasswordToAccountID[viewerPassword] = accountID
+			log.Printf("Mapped viewer password to account ID: %s", accountID)
+		}
+	}
+	appState.Mutex.Unlock()
+
+	// Process events as before, scoped to accountID
 	switch payload.Event {
 	case "endpoint.url_validation":
 		handleWebhookValidation(w, r, payload)
 	case "meeting.participant_joined":
-		handleParticipantJoined(payload)
+		handleParticipantJoined(payload, accountID)
 	case "meeting.participant_left":
-		handleParticipantLeft(payload)
+		handleParticipantLeft(payload, accountID)
 	case "meeting.ended":
-		handleMeetingEnded(payload)
+		handleMeetingEnded(payload, accountID)
 	default:
-		log.Printf("Unhandled event: %s", payload.Event)
+		log.Printf("Unhandled event: %s for account: %s", payload.Event, accountID)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -395,21 +463,40 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 // ViewParticipantsHandler displays the participant list or password prompt
 func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	authenticated := false
+	var accountID string
+	var errorMessage string
 
 	if r.Method == "POST" {
-		password := r.FormValue("password")
-		if password == ConfigInstance.ViewerPassword {
+		viewerPassword := r.FormValue("password")
+		appState.Mutex.RLock()
+		if accID, exists := appState.PasswordToAccountID[viewerPassword]; exists {
 			authenticated = true
+			accountID = accID
 		} else {
-			http.Error(w, "Incorrect password", http.StatusUnauthorized)
-			return
+			// Fallback to database check if not in map
+			var dbAccountID string
+			err := appState.DB.QueryRow("SELECT account_id FROM accounts WHERE viewer_password = ?", viewerPassword).Scan(&dbAccountID)
+			if err == nil {
+				authenticated = true
+				accountID = dbAccountID
+				appState.Mutex.RUnlock()
+				appState.Mutex.Lock()
+				appState.PasswordToAccountID[viewerPassword] = accountID
+				appState.Mutex.Unlock()
+			} else if err != sql.ErrNoRows {
+				errorMessage = "Database error during authentication."
+				log.Printf("Database error during auth: %v", err)
+			} else {
+				errorMessage = "Incorrect password."
+			}
+			appState.Mutex.RUnlock()
 		}
 	}
 
 	// Get the latest meeting (for simplicity, show the most recently updated)
 	var latestMeeting *MeetingData
 	appState.Mutex.RLock()
-	for _, meeting := range appState.Meetings {
+	for _, meeting := range appState.Meetings[accountID] {
 		if latestMeeting == nil || meeting.LastUpdated.After(latestMeeting.LastUpdated) {
 			latestMeeting = meeting
 		}
@@ -423,6 +510,7 @@ func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httproute
 		MeetingTopic     string
 		Password         string
 		Updated          string
+		ErrorMessage     string
 	}{
 		Authenticated:    authenticated,
 		Participants:     nil,
@@ -430,6 +518,7 @@ func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httproute
 		MeetingTopic:     "",
 		Password:         "",
 		Updated:          time.Now().Format(time.RFC1123),
+		ErrorMessage:     errorMessage,
 	}
 
 	if authenticated && latestMeeting != nil {
@@ -445,6 +534,54 @@ func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httproute
 		data.Password = r.FormValue("password")
 	}
 
+	w.Header().Set("Content-Type", "text/html")
+	if err := tmpl.Execute(w, data); err != nil {
+		http.Error(w, "Error rendering page", http.StatusInternalServerError)
+		log.Printf("Template execution error: %v", err)
+	}
+}
+
+func addAccountHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	if r.Method != "POST" {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	accountID := r.FormValue("account_id")
+	secretToken := r.FormValue("secret_token")
+	viewerPassword := r.FormValue("viewer_password")
+
+	// Validate input lengths
+	if len(secretToken) < 15 || len(viewerPassword) < 15 {
+		renderError(w, "Secret Token and Viewer Password must be at least 15 characters long.", http.StatusBadRequest)
+		return
+	}
+
+	// Insert into database with uniqueness check for viewer_password
+	insertSQL := `INSERT INTO accounts (account_id, secret_token, viewer_password) VALUES (?, ?, ?)`
+	_, err := appState.DB.Exec(insertSQL, accountID, secretToken, viewerPassword)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			renderError(w, "Viewer Password must be unique. This password is already in use.", http.StatusBadRequest)
+		} else {
+			renderError(w, fmt.Sprintf("Failed to add account: %v", err), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	log.Printf("Added new account: %s", accountID)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func renderError(w http.ResponseWriter, message string, statusCode int) {
+	w.WriteHeader(statusCode)
+	data := struct {
+		Authenticated bool
+		ErrorMessage  string
+	}{
+		Authenticated: false,
+		ErrorMessage:  message,
+	}
 	w.Header().Set("Content-Type", "text/html")
 	if err := tmpl.Execute(w, data); err != nil {
 		http.Error(w, "Error rendering page", http.StatusInternalServerError)

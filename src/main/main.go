@@ -11,10 +11,11 @@ import (
 
 func main() {
 	var err error
-	handler.ConfigInstance, err = handler.NewConfig("config.yml")
-	if err != nil || handler.ConfigInstance.ViewerPassword == "" {
-		log.Fatalf("Could not load config: %v", err)
+	db, err := handler.InitDB("./zoom_accounts.db")
+	if err != nil {
+		log.Fatalf("Database initialization failed: %v", err)
 	}
+	defer db.Close()
 
 	server := handler.NewServer()
 
