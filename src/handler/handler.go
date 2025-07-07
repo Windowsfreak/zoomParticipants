@@ -379,6 +379,10 @@ func cleanupOldMeetings() {
 // WebhookHandler processes incoming Zoom webhook events
 func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
 	r.Body = io.NopCloser(strings.NewReader(string(body)))
 
 	var payload ZoomWebhookPayload
