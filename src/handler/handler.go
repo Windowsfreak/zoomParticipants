@@ -408,12 +408,10 @@ func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httproute
 
 	// Get the latest meeting (for simplicity, show the most recently updated)
 	var latestMeeting *MeetingData
-	var latestUUID string
 	appState.Mutex.RLock()
-	for uuid, meeting := range appState.Meetings {
+	for _, meeting := range appState.Meetings {
 		if latestMeeting == nil || meeting.LastUpdated.After(latestMeeting.LastUpdated) {
 			latestMeeting = meeting
-			latestUUID = uuid
 		}
 	}
 	appState.Mutex.RUnlock()
