@@ -403,6 +403,7 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 
 	if !validateWebhookSignature(r, secretToken) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		log.Printf("Invalid signature for account %s, payload %v+", accountID, payload)
 		return
 	}
 
