@@ -292,20 +292,7 @@ func validateWebhookSignature(r *http.Request, secretToken string) bool {
 }
 
 // handleWebhookValidation handles Zoom's endpoint URL validation challenge
-func handleWebhookValidation(w http.ResponseWriter, r *http.Request, payload ZoomWebhookPayload) {
-	accountID := payload.Payload.AccountID
-
-	// Retrieve the secret token from the database for this account
-	var secretToken string
-	err := appState.DB.QueryRow("SELECT secret_token FROM accounts WHERE account_id = ?", accountID).Scan(&secretToken)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "Unknown account", http.StatusUnauthorized)
-		return
-	} else if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-
+func handleWebhookValidation(w http.ResponseWriter, r *http.Request, payload ZoomWebhookPayload, secretToken string) {
 	plainToken := payload.Payload.PlainToken
 	h := hmac.New(sha256.New, []byte(secretToken))
 	h.Write([]byte(plainToken))
@@ -434,7 +421,7 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 	// Process events as before, scoped to accountID
 	switch payload.Event {
 	case "endpoint.url_validation":
-		handleWebhookValidation(w, r, payload)
+		handleWebhookValidation(w, r, payload, secretToken)
 	case "meeting.participant_joined":
 		handleParticipantJoined(payload, accountID)
 	case "meeting.participant_left":
@@ -452,9 +439,8 @@ func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httproute
 	authenticated := false
 	var accountID string
 	var errorMessage string
-
+	viewerPassword := r.FormValue("password")
 	if r.Method == "POST" {
-		viewerPassword := r.FormValue("password")
 		appState.Mutex.RLock()
 		if accID, exists := appState.PasswordToAccountID[viewerPassword]; exists {
 			authenticated = true
@@ -518,7 +504,7 @@ func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httproute
 		data.Participants = names
 		data.ParticipantCount = len(names)
 		data.MeetingTopic = latestMeeting.Topic
-		data.Password = r.FormValue("password")
+		data.Password = viewerPassword
 	}
 
 	w.Header().Set("Content-Type", "text/html")
