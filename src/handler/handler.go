@@ -273,15 +273,9 @@ func NewServer() *http.Server {
 }
 
 // validateWebhookSignature verifies the incoming webhook signature
-func validateWebhookSignature(r *http.Request, secretToken string) bool {
+func validateWebhookSignature(r *http.Request, body []byte, secretToken string) bool {
 	timestamp := r.Header.Get("x-zm-request-timestamp")
 	signature := r.Header.Get("x-zm-signature")
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return false
-	}
-	// Reset body for further processing
-	r.Body = io.NopCloser(strings.NewReader(string(body)))
 
 	message := fmt.Sprintf("v0:%s:%s", timestamp, string(body))
 	h := hmac.New(sha256.New, []byte(secretToken))
@@ -292,7 +286,7 @@ func validateWebhookSignature(r *http.Request, secretToken string) bool {
 }
 
 // handleWebhookValidation handles Zoom's endpoint URL validation challenge
-func handleWebhookValidation(w http.ResponseWriter, r *http.Request, payload ZoomWebhookPayload, secretToken string) {
+func handleWebhookValidation(w http.ResponseWriter, payload ZoomWebhookPayload, secretToken string) {
 	plainToken := payload.Payload.PlainToken
 	h := hmac.New(sha256.New, []byte(secretToken))
 	h.Write([]byte(plainToken))
@@ -384,6 +378,9 @@ func cleanupOldMeetings() {
 
 // WebhookHandler processes incoming Zoom webhook events
 func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	body, err := io.ReadAll(r.Body)
+	r.Body = io.NopCloser(strings.NewReader(string(body)))
+
 	var payload ZoomWebhookPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Invalid payload", http.StatusBadRequest)
@@ -392,8 +389,8 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 
 	accountID := payload.Payload.AccountID
 	var secretToken string
-	err := appState.DB.QueryRow("SELECT secret_token FROM accounts WHERE account_id = ?", accountID).Scan(&secretToken)
-	if err == sql.ErrNoRows {
+	err = appState.DB.QueryRow("SELECT secret_token FROM accounts WHERE account_id = ?", accountID).Scan(&secretToken)
+	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "Unknown account", http.StatusUnauthorized)
 		return
 	} else if err != nil {
@@ -401,7 +398,7 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 		return
 	}
 
-	if !validateWebhookSignature(r, secretToken) {
+	if !validateWebhookSignature(r, body, secretToken) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		log.Printf("Invalid signature for account %s, payload %v+", accountID, payload)
 		return
@@ -422,7 +419,7 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 	// Process events as before, scoped to accountID
 	switch payload.Event {
 	case "endpoint.url_validation":
-		handleWebhookValidation(w, r, payload, secretToken)
+		handleWebhookValidation(w, payload, secretToken)
 	case "meeting.participant_joined":
 		handleParticipantJoined(payload, accountID)
 	case "meeting.participant_left":
