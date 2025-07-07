@@ -402,7 +402,6 @@ func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httproute
 			authenticated = true
 		} else {
 			http.Error(w, "Incorrect password", http.StatusUnauthorized)
-			log.Print(ConfigInstance.ViewerPassword)
 			return
 		}
 	}
@@ -446,7 +445,6 @@ func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httproute
 		data.ParticipantCount = len(names)
 		data.MeetingTopic = latestMeeting.Topic
 		data.Password = r.FormValue("password")
-		log.Printf("Displaying participants for meeting: %s", latestUUID)
 	}
 
 	w.Header().Set("Content-Type", "text/html")
