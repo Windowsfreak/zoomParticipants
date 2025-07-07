@@ -36,9 +36,3 @@ type AppState struct {
 	Meetings map[string]*MeetingData // Key: Meeting UUID
 	Mutex    sync.RWMutex
 }
-
-// Config holds application configuration
-type Config struct {
-	WebhookSecretToken string
-	ViewerPassword     string
-}

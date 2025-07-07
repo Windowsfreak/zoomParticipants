@@ -22,10 +22,6 @@ var (
 	appState = &AppState{
 		Meetings: make(map[string]*MeetingData),
 	}
-	config = &Config{
-		WebhookSecretToken: "YOUR_ZOOM_WEBHOOK_SECRET_TOKEN", // Replace with your secret token
-		ViewerPassword:     "YOUR_VIEWER_PASSWORD",           // Replace with your password
-	}
 	tmpl *template.Template
 )
 
@@ -271,7 +267,7 @@ func validateWebhookSignature(r *http.Request, secretToken string) bool {
 // handleWebhookValidation handles Zoom's endpoint URL validation challenge
 func handleWebhookValidation(w http.ResponseWriter, r *http.Request, payload ZoomWebhookPayload) {
 	plainToken := payload.Payload.PlainToken
-	h := hmac.New(sha256.New, []byte(config.WebhookSecretToken))
+	h := hmac.New(sha256.New, []byte(ConfigInstance.WebhookSecretToken))
 	h.Write([]byte(plainToken))
 	encryptedToken := hex.EncodeToString(h.Sum(nil))
 
@@ -365,9 +361,9 @@ func cleanupOldMeetings() {
 	}
 }
 
-// webhookHandler processes incoming Zoom webhook events
+// WebhookHandler processes incoming Zoom webhook events
 func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	if !validateWebhookSignature(r, config.WebhookSecretToken) {
+	if !validateWebhookSignature(r, ConfigInstance.WebhookSecretToken) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		log.Println("Webhook signature validation failed")
 		return
@@ -396,24 +392,17 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 	w.WriteHeader(http.StatusOK)
 }
 
-// viewParticipantsHandler displays the participant list or password prompt
+// ViewParticipantsHandler displays the participant list or password prompt
 func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	// Check if already authenticated (simple cookie check for demo)
-	cookie, err := r.Cookie("auth")
-	authenticated := err == nil && cookie.Value == "true"
+	authenticated := false
 
 	if r.Method == "POST" {
 		password := r.FormValue("password")
-		if password == config.ViewerPassword {
-			http.SetCookie(w, &http.Cookie{
-				Name:    "auth",
-				Value:   "true",
-				Expires: time.Now().Add(24 * time.Hour),
-				Path:    "/",
-			})
+		if password == ConfigInstance.ViewerPassword {
 			authenticated = true
 		} else {
 			http.Error(w, "Incorrect password", http.StatusUnauthorized)
+			log.Print(ConfigInstance.ViewerPassword)
 			return
 		}
 	}

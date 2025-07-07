@@ -10,6 +10,11 @@ import (
 )
 
 func main() {
+	var err error
+	handler.ConfigInstance, err = handler.NewConfig("config.yml")
+	if err != nil || handler.ConfigInstance.ViewerPassword == "" {
+		log.Fatalf("Could not load config: %v", err)
+	}
 
 	server := handler.NewServer()
 
