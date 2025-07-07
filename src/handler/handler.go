@@ -470,6 +470,7 @@ func ViewParticipantsHandler(w http.ResponseWriter, r *http.Request, _ httproute
 				appState.Mutex.Lock()
 				appState.PasswordToAccountID[viewerPassword] = accountID
 				appState.Mutex.Unlock()
+				appState.Mutex.RLock()
 			} else if !errors.Is(err, sql.ErrNoRows) {
 				errorMessage = "Database error during authentication."
 			} else {
