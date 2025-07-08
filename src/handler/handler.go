@@ -138,7 +138,7 @@ func init() {
 		.add-account-form div {
 			margin-bottom: 10px;
 		}
-		.add-account-form input {
+		.add-account-form label, .add-account-form input {
 			padding: 5px;
 			width: 250px;
 		}
@@ -188,28 +188,30 @@ func init() {
             </script>
         {{ else }}
             <div class="password-form">
+				<h3>Teilnehmerliste einsehen</h3>
                 <form method="POST" action="/">
-                    <label for="password">Diese Seite ist durch ein Kennwort geschützt:</label>
+                    <label for="password">Zugangskennwort:</label>
                     <input type="password" id="password" name="password" required>
                     <button type="submit">Absenden</button>
                 </form>
             </div>
+			<hr />
 			<div class="add-account-form">
-				<h3>Add New Account</h3>
+				<h3>Neuen App-Benutzer registrieren</h3>
 				<form method="POST" action="/add-account">
 					<div>
-						<label for="account_id">Account ID:</label>
+						<label for="account_id">Konto-ID:</label>
 						<input type="text" id="account_id" name="account_id" required>
 					</div>
 					<div>
-						<label for="secret_token">Secret Token (min 15 chars):</label>
+						<label for="secret_token">Geheimer Schlüssel:</label>
 						<input type="password" id="secret_token" name="secret_token" required minlength="15">
 					</div>
 					<div>
-						<label for="viewer_password">Viewer Password (min 15 chars, unique):</label>
+						<label for="viewer_password">Zugangskennwort:</label>
 						<input type="password" id="viewer_password" name="viewer_password" required minlength="15">
 					</div>
-					<button type="submit">Add Account</button>
+					<button type="submit">Hinzufügen</button>
 					{{ if .ErrorMessage }}
 						<p style="color: red;">{{ .ErrorMessage }}</p>
 					{{ end }}
