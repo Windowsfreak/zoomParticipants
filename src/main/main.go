@@ -10,14 +10,13 @@ import (
 )
 
 func main() {
-	var err error
 	db, err := handler.InitDB("./zoom_accounts.db")
 	if err != nil {
 		log.Fatalf("Database initialization failed: %v", err)
 	}
 	defer db.Close()
 
-	server := handler.NewServer()
+	server := handler.NewServer(db)
 
 	socketPath := os.Getenv("UNIX")
 	c := make(chan os.Signal, 1)

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zoom-Teilnehmer</title>
+    <style>
+        html, body {
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #121212;
+                color: #e0e0e0;
+            }
+            input, button {
+                background-color: #333;
+                color: #e0e0e0;
+                border: 1px solid #555;
+            }
+        }
+        @media (prefers-color-scheme: light) {
+            body {
+                background-color: #ffffff;
+                color: #333;
+            }
+            input, button {
+                background-color: #f0f0f0;
+                color: #333;
+                border: 1px solid #ccc;
+            }
+        }
+        h1, h2, p {
+            margin: 0 0 10px 0;
+        }
+        .container {
+            margin: 0 auto;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            flex: 0 0 auto;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .password-form {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .add-account-form {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .add-account-form div {
+            margin-bottom: 10px;
+        }
+        .add-account-form input {
+            padding: 5px;
+            width: 250px;
+        }
+        .participants-container {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            flex-wrap: wrap;
+            gap: 2px;
+            align-content: center;
+            justify-content: flex-start;
+        }
+        .participant {
+            height: 30px;
+            line-height: 30px;
+            flex: 0 0 auto;
+            width: calc(33.33% - 5px);
+            box-sizing: border-box;
+            padding: 0 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: rgba(0,0,0,0.05);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .participant span {
+            user-select: none;
+        }
+        @media (prefers-color-scheme: dark) {
+            .participant {
+                border: 1px solid #444;
+                background-color: rgba(255,255,255,0.1);
+            }
+        }
+        @media (max-width: 600px) {
+            .participant {
+                width: calc(50% - 5px);
+            }
+        }
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Zoom-Teilnehmer</h1>
+        {{ if .Authenticated }}
+        <h2>Meeting: {{ .MeetingTopic }}</h2>
+        <p>Teilnehmer: {{ .ParticipantCount }}</p>
+        <p>Letzte Aktualisierung: {{ .Updated }}</p>
+        <div class="button-group">
+            <button id="copy" onclick="copyToClipboard()">Liste in Zwischenablage kopieren</button>
+            <button onclick="document.getElementById('refreshForm').submit()">Aktualisieren</button>
+        </div>
+        <form id="refreshForm" method="POST" action="/" style="display:none;">
+            <input type="hidden" name="password" value="{{ .Password }}" />
+        </form>
+        {{ end }}
+    </div>
+    {{ if .Authenticated }}
+    <div class="participants-container">
+        {{ range $index, $name := .Participants }}
+        <div class="participant"><span>{{ add $index 1 }}. </span>{{ $name }}</div>
+        {{ end }}
+    </div>
+    <script>
+        function copyToClipboard() {
+            const participants = document.querySelectorAll('.participant');
+            let text = Array.from(participants)
+                .map(p => p.textContent)
+                .join('\n');
+            navigator.clipboard.writeText(text)
+                // change the button name for a few seconds
+                .then(() => {
+                    const button = document.querySelector('#copy');
+                    if (!button) return;
+                    button.textContent = 'In Zwischenablage kopiert!';
+                    setTimeout(() => {
+                        button.textContent = 'Liste in Zwischenablage kopieren';
+                    }, 2000);
+                })
+                .catch(err => alert('Fehler beim Kopieren: ' + err));
+        }
+    </script>
+    {{ else }}
+    <div class="password-form">
+        <h3>Teilnehmerliste einsehen</h3>
+        <form method="POST" action="/">
+            <label for="password">Passwort eingeben:</label>
+            <input type="password" id="password" name="password" required>
+            <button type="submit">Absenden</button>
+        </form>
+    </div>
+    <div class="add-account-form">
+        <h3>Neues Konto hinzufügen</h3>
+        <form method="POST" action="/add-account">
+            <div>
+                <label for="account_id">Konto-ID:</label>
+                <input type="text" id="account_id" name="account_id" required>
+            </div>
+            <div>
+                <label for="secret_token">Geheimer Schlüssel:</label>
+                <input type="password" id="secret_token" name="secret_token" required minlength="15">
+            </div>
+            <div>
+                <label for="viewer_password">Zugangskennwort:</label>
+                <input type="password" id="viewer_password" name="viewer_password" required minlength="15">
+            </div>
+            <button type="submit">Hinzufügen</button>
+            {{ if .ErrorMessage }}
+            <p style="color: red;">{{ .ErrorMessage }}</p>
+            {{ end }}
+        </form>
+    </div>
+    {{ end }}
+</div>
+</body>
+</html>

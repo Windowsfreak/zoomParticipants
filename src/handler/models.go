@@ -35,7 +35,8 @@ type MeetingData struct {
 // AppState holds the application state with thread-safe access
 type AppState struct {
 	Meetings            map[string]map[string]*MeetingData // Key: AccountID -> Meeting UUID -> MeetingData
+	AccountMutexes      map[string]*sync.RWMutex           // Key: AccountID -> Mutex for that account's meetings
 	PasswordToAccountID map[string]string                  // Key: ViewerPassword -> AccountID
-	Mutex               sync.RWMutex
+	PasswordMutex       sync.RWMutex                       // Dedicated mutex for password map
 	DB                  *sql.DB
 }
