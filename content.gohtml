@@ -372,8 +372,7 @@
             const div = document.createElement('div');
             div.className = 'participant added';
             div.textContent = name;
-            div.appendChild(document.createElement('span'));
-            container.appendChild(div);
+            div.insertBefore(document.createElement('span'), div.firstChild);
             setTimeout(() => div.classList.remove('added'), 1000);
         }
 
