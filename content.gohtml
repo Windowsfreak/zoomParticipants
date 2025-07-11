@@ -161,7 +161,7 @@
         {{ if .Authenticated }}
         <h2>Meeting: {{ .MeetingTopic }}</h2>
         <p>Teilnehmer: {{ .ParticipantCount }}</p>
-        <p>Letzte Aktualisierung: {{ .Updated }}</p>
+        <p>Letzte Aktualisierung: <span id="updated">{{ .Updated }}</span></p>
         <div class="button-group">
             <button id="copy" onclick="copyToClipboard()">Liste in Zwischenablage kopieren</button>
             <button id="startRaffleBtn" onclick="startRaffle()">Ziehung</button>
@@ -362,6 +362,7 @@
             } else if (update.action === 'remove') {
                 removeParticipant(update.name);
             }
+            document.getElementById('updated').textContent = new Date().toLocaleString();
         };
 
         function addParticipant(name) {
