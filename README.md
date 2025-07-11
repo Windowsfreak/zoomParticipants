@@ -10,7 +10,7 @@ Eine Beispielansicht ist unter [https://zoom.8bj.de/test](https://zoom.8bj.de/te
 - **Datenschutzorientiert**: Teilnehmernamen werden nur temporär im Speicher gehalten und spätestens nach 6 Stunden, dem Verlassen oder Meeting-Ende gelöscht.
 - **Multi-User-Unterstützung**: Unterstützt mehrere Zoom-Konten mit individuellen Secret Tokens und Viewer-Passwörtern.
 - **Benutzerfreundliche Oberfläche**: Eine einfache Weboberfläche zum Anzeigen und Kopieren der Teilnehmerliste.
-- **Zufallsziehung**: Ermöglicht die zufällige Auswahl von Teilnehmern aus der Liste.
+- **Zufallsziehung**: Ermöglicht die zufällige Auswahl von Teilnehmern aus der Liste unter Verwendung von `browserCrypto`.
 
 ## Voraussetzungen für den Betrieb eines Servers
 
@@ -67,4 +67,4 @@ Dieses Projekt ist Open Source und steht unter der MIT-Lizenz.
 ## Danksagungen
 
 - [https://www.npmjs.com/package/random-js](random-js)
-- [https://www.flaticon.com/free-icons/workshop](Workshop icons created by smashingstocks - Flaticon)
+- [https://www.flaticon.com/free-icons/workshop](Workshop icons created by smashingstocks Flaticon)
