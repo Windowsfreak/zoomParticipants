@@ -415,6 +415,36 @@ func SetupHandlers(router *httprouter.Router, db *sql.DB) {
 	router.GET("/", viewParticipantsHandler)
 	router.POST("/", viewParticipantsHandler)
 	router.POST("/add-account", addAccountHandler)
+	router.GET("/test", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		renderTemplate(w, true, []string{
+			"Alice Smith",
+			"Bob Johnson",
+			"Charlie Brown",
+			"David Wilson",
+			"Eve Davis",
+			"Frank Miller",
+			"Grace Lee",
+			"Hannah Garcia",
+			"Ian Martinez",
+			"Jack Taylor",
+			"Kate Anderson",
+			"Liam Thomas",
+			"Mia Jackson",
+			"Noah White",
+			"Olivia Harris",
+			"Paul Clark",
+			"Quinn Lewis",
+			"Rachel Walker",
+			"Sam Hall",
+			"Tina Young",
+			"Uma King",
+			"Vera Wright",
+			"Walter Scott",
+			"Xander Green",
+			"Yara Adams",
+			"Zoe Baker",
+		}, 26, "Simulated Demo", "", "", time.Now().Format("2006-01-02 15:04:05"))
+	})
 
 	// Start cleanup routine
 	go cleanupOldMeetings()

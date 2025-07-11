@@ -74,6 +74,7 @@
             gap: 2px;
             align-content: center;
             justify-content: flex-start;
+            position: relative;
         }
         .participant {
             height: 30px;
@@ -87,9 +88,36 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            position: relative;
+            transition: transform 0.5s ease, background-color 0.5s ease;
         }
         .participant span {
             user-select: none;
+        }
+        @keyframes blinkBorder {
+            0%, 100% { outline-color: transparent; }
+            50% { outline-color: #ff0000; }
+        }
+        .participant.blinking {
+            outline: 2px solid;
+            animation: blinkBorder 1s ease-in-out 5;
+            animation-fill-mode: forwards;
+        }
+        .confetti-particle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: hsl(var(--hue), 50%, 70%); /* Muted colors */
+            animation: confettiFall 6s linear infinite;
+            opacity: 0.7;
+            transition: opacity 3s ease-out;
+        }
+        .confetti-particle.fade-out {
+            opacity: 0;
+        }
+        @keyframes confettiFall {
+            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(1080deg); opacity: 0; }
         }
         @media (prefers-color-scheme: dark) {
             .participant {
@@ -120,7 +148,10 @@
         <div class="button-group">
             <button id="copy" onclick="copyToClipboard()">Liste in Zwischenablage kopieren</button>
             <button onclick="document.getElementById('refreshForm').submit()">Aktualisieren</button>
+            <button id="startRaffleBtn" onclick="startRaffle()">Ziehung</button>
         </div>
+        <input type="number" id="waitTimeSpinner" min="1" max="30" value="5">
+        <label for="waitTimeSpinner">Sek.</label>
         <form id="refreshForm" method="POST" action="/" style="display:none;">
             <input type="hidden" name="password" value="{{ .Password }}" />
         </form>
@@ -149,6 +180,146 @@
                     }, 2000);
                 })
                 .catch(err => alert('Fehler beim Kopieren: ' + err));
+        }
+
+        let participants;
+        let container;
+        let winner;
+        let raffleInProgress = false;
+
+        function isDarkMode() {
+            return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        }
+
+        function getBackgroundColorForMode(hue) {
+            if (isDarkMode()) {
+                // Muted, less intense for dark mode
+                return `hsl(${hue}, 30%, 40%)`;
+            } else {
+                // Brighter for light mode
+                return `hsl(${hue}, 70%, 80%)`;
+            }
+        }
+
+        function randomScale() {
+            return 0.8 + Math.random() * 0.4;
+        }
+
+        function randomHue() {
+            return Math.floor(Math.random() * 360);
+        }
+
+        function applyRandomStyles() {
+            participants.forEach(part => {
+                const scale = randomScale();
+                const hue = randomHue();
+                part.style.transform = `scale(${scale})`;
+                part.style.backgroundColor = getBackgroundColorForMode(hue);
+                part.style.opacity = 1;
+                part.style.zIndex = 1;
+            });
+        }
+        function applyRandomTransition() {
+            const i = Math.floor(Math.random() * participants.length);
+            const part = participants[i];
+            const scale = randomScale();
+            const hue = randomHue();
+            part.style.transform = `scale(${scale})`;
+            part.style.backgroundColor = getBackgroundColorForMode(hue);
+            part.style.opacity = 1;
+            part.style.zIndex = 1;
+        }
+
+        function startRaffle() {
+            if (raffleInProgress) return;
+            document.getElementById('startRaffleBtn').textContent = 'Ziehung läuft...';
+            document.getElementById('startRaffleBtn').disabled = true;
+            document.getElementById('waitTimeSpinner').disabled = true;
+            raffleInProgress = true;
+            const particles = document.querySelectorAll('.confetti-particle');
+            particles.forEach(p => p.remove());
+
+            participants = document.querySelectorAll('.participant');
+            container = document.querySelector('.participants-container');
+            const iterations = parseInt(document.getElementById('waitTimeSpinner').value) * 100;
+            let currentIteration = 0;
+            const interval = 10; // ms per iteration
+
+            applyRandomStyles();
+            const intervalId = setInterval(() => {
+                applyRandomTransition();
+                currentIteration++;
+                if (currentIteration >= iterations) {
+                    clearInterval(intervalId);
+                    selectWinner();
+                }
+            }, interval);
+        }
+        function selectWinner() {
+            const participantsArray = Array.from(participants);
+            const winnerIndex = Math.floor(Math.random() * participantsArray.length);
+            winner = participantsArray[winnerIndex];
+            const scaleFactor = 2; // The enlargement scale for the winner
+
+            // Get winner's current position and size (pre-scale)
+            const winnerRect = winner.getBoundingClientRect();
+            const winnerCenterX = winnerRect.left + winnerRect.width / 2;
+            const winnerCenterY = winnerRect.top + winnerRect.height / 2;
+
+            // Get viewport center
+            const containerRect = container.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            const centerX = viewportWidth / 2;
+            let centerY = viewportHeight / 2;
+            if (centerY < containerRect.y + winnerRect.height / 2 * scaleFactor) {
+                centerY = containerRect.y + winnerRect.height / 2 * scaleFactor;
+            }
+
+            // Calculate translation to viewport center, adjusted for scale
+            const translateX = (centerX - winnerCenterX) / scaleFactor;
+            const translateY = (centerY - winnerCenterY) / scaleFactor;
+
+            // Reset non-winners to default size and fade
+            participantsArray.forEach((part, index) => {
+                if (index !== winnerIndex) {
+                    part.style.transform = 'scale(1)'; // Back to default size
+                    part.style.backgroundColor = ''; // Reset to original or CSS default
+                    part.style.opacity = 0.5;
+                    part.style.zIndex = 0;
+                }
+            });
+
+            // Enlarge and move winner to center
+            winner.style.transform = `scale(${scaleFactor}) translate(${translateX}px, ${translateY}px)`;
+            winner.style.zIndex = 10;
+            winner.style.opacity = 1;
+
+            // Trigger celebration after a short delay
+            setTimeout(startCelebration, 1000);
+        }
+        function startCelebration() {
+            const myWinner = winner;
+            myWinner.classList.add('blinking');
+
+            // Generate 50 confetti particles, attached to body
+            for (let i = 0; i < 150; i++) {
+                const particle = document.createElement('div');
+                particle.classList.add('confetti-particle');
+                particle.style.left = `${Math.random() * 100}%`;
+                particle.style.animationDelay = `${Math.random() * 6}s`;
+                particle.style.setProperty('--hue', Math.floor(Math.random() * 360));
+                document.body.appendChild(particle);
+            }
+            raffleInProgress = false;
+            document.getElementById('startRaffleBtn').textContent = 'Ziehung';
+            document.getElementById('startRaffleBtn').disabled = false;
+            document.getElementById('waitTimeSpinner').disabled = false;
+
+
+            setTimeout(() => {
+                myWinner.classList.remove('blinking');
+            }, 5000);
         }
     </script>
     {{ else }}

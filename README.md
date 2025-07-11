@@ -2,17 +2,19 @@
 
 Ein Open-Source-Tool zur Echtzeit-Auswertung der Teilnehmerliste in Zoom-Meetings. Diese Anwendung ermöglicht es Ihnen, Teilnehmerlisten während eines Meetings zu extrahieren.
 
+Eine Beispielansicht ist unter [https://zoom.8bj.de/test](https://zoom.8bj.de/test) verfügbar.
+
 ## Funktionen
 
 - **Echtzeit-Teilnehmererfassung**: Erfasst Teilnehmerdaten während eines Zoom-Meetings über Webhooks.
 - **Datenschutzorientiert**: Teilnehmernamen werden nur temporär im Speicher gehalten und spätestens nach 6 Stunden, dem Verlassen oder Meeting-Ende gelöscht.
 - **Multi-User-Unterstützung**: Unterstützt mehrere Zoom-Konten mit individuellen Secret Tokens und Viewer-Passwörtern.
 - **Benutzerfreundliche Oberfläche**: Eine einfache Weboberfläche zum Anzeigen und Kopieren der Teilnehmerliste.
+- **Zufallsziehung**: Ermöglicht die zufällige Auswahl von Teilnehmern aus der Liste.
 
-## Voraussetzungen
+## Voraussetzungen für den Betrieb eines Servers
 
 - **Golang**: Zum Kompilieren der Anwendung.
-- **CGO**: Erforderlich für die SQLite-Integration.
 - **SQLite-Treiber**: Für die Speicherung von Kontoinformationen.
 - **Reverse-Proxy-Webserver**: Für HTTPS-Unterstützung.
 
@@ -41,10 +43,10 @@ make build
 
 ## Einrichtung eines neuen Benutzers
 
-- **Account-ID finden**: Melden Sie sich auf der Zoom-Website an, öffnen Sie die Entwickler-Tools im Browser und suchen Sie nach dem HTTP-only-Cookie `zm_aid`..
+- **Account-ID finden**: Melden Sie sich auf der Zoom-Website an, öffnen Sie die Entwickler-Tools im Browser und suchen Sie nach dem HTTP-only-Cookie `zm_aid`.
 - **Secret Token**: Wird beim Hinzufügen Ihrer Anwendung im Zoom App Marketplace bereitgestellt.
-- **Viewer-Passwort**: Wählen Sie ein Passwort, das beim Hinzufügen des Kontos verwendet wird.
-- Fügen Sie das Konto über die Weboberfläche hinzu, indem Sie die Account-ID, den Secret Token und das Viewer-Passwort eingeben.
+- **Zugangskennwort**: Wählen Sie ein sicheres Passwort, mit dem Sie auf die Teilnehmerliste zugreifen möchten.
+- Fügen Sie das Konto über die Weboberfläche hinzu, indem Sie die Account-ID, den Secret Token und das Zugangskennwort eingeben.
 
 ## Datenschutz und Sicherheit
 
