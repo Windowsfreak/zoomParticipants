@@ -32,15 +32,15 @@ var (
 	tmpl *template.Template
 )
 
-// init parses the HTML template for the participant list page
-func init() {
+// Init parses the HTML template for the participant list page
+func Init() {
 	funcMap := template.FuncMap{
 		"add": func(a, b int) int {
 			return a + b
 		},
 	}
 	var err error
-	tmpl, err = template.New("participants").Funcs(funcMap).ParseFiles("./content.html")
+	tmpl, err = template.New("content.gohtml").Funcs(funcMap).ParseFiles("content.gohtml")
 	if err != nil {
 		log.Fatalf("Failed to parse template: %v", err)
 	}
@@ -69,6 +69,7 @@ func InitDB(dbPath string) (*sql.DB, error) {
 }
 
 func NewServer(db *sql.DB) *http.Server {
+	Init()
 	r := httprouter.New()
 
 	SetupHandlers(r, db)
@@ -362,6 +363,7 @@ func renderTemplate(w http.ResponseWriter, authenticated bool, participants []st
 	w.Header().Set("Content-Type", "text/html")
 	if err := tmpl.Execute(w, data); err != nil {
 		http.Error(w, "Fehler beim Rendern der Seite", http.StatusInternalServerError)
+		log.Println(err)
 	}
 }
 
