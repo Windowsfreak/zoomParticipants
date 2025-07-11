@@ -445,6 +445,14 @@ func SetupHandlers(router *httprouter.Router, db *sql.DB) {
 			"Zoe Baker",
 		}, 26, "Simulated Demo", "", "", time.Now().Format("2006-01-02 15:04:05"))
 	})
+	router.GET("/random-js.min.js", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		w.Header().Set("Content-Type", "application/javascript")
+		http.ServeFile(w, r, "random-js.min.js")
+	})
+	router.GET("/workshop.png", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		w.Header().Set("Content-Type", "image/png")
+		http.ServeFile(w, r, "workshop.png")
+	})
 
 	// Start cleanup routine
 	go cleanupOldMeetings()

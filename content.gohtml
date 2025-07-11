@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zoom-Teilnehmer</title>
+    <script src="random-js.min.js"></script>
+    <link rel="icon" href="workshop.png" type="image/png">
     <style>
         html, body {
             height: 100vh;
@@ -229,7 +231,7 @@
             part.style.opacity = 1;
             part.style.zIndex = 1;
         }
-
+        const random = new Random(browserCrypto);
         function startRaffle() {
             if (raffleInProgress) return;
             document.getElementById('startRaffleBtn').textContent = 'Ziehung läuft...';
@@ -257,7 +259,7 @@
         }
         function selectWinner() {
             const participantsArray = Array.from(participants);
-            const winnerIndex = Math.floor(Math.random() * participantsArray.length);
+            const winnerIndex = random.integer(0, participantsArray.length - 1);
             winner = participantsArray[winnerIndex];
             const scaleFactor = 2; // The enlargement scale for the winner
 

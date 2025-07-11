@@ -63,3 +63,8 @@ Für Unterstützung oder Fragen erreichen Sie mich über Facebook, Instagram und
 ## Lizenz
 
 Dieses Projekt ist Open Source und steht unter der MIT-Lizenz.
+
+## Danksagungen
+
+- [https://www.npmjs.com/package/random-js](random-js)
+- [https://www.flaticon.com/free-icons/workshop](Workshop icons created by smashingstocks - Flaticon)
