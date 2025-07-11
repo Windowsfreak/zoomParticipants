@@ -164,11 +164,12 @@
         <p>Letzte Aktualisierung: {{ .Updated }}</p>
         <div class="button-group">
             <button id="copy" onclick="copyToClipboard()">Liste in Zwischenablage kopieren</button>
-            <button onclick="document.getElementById('refreshForm').submit()">Aktualisieren</button>
             <button id="startRaffleBtn" onclick="startRaffle()">Ziehung</button>
+            <div>
+                <input type="number" id="waitTimeSpinner" min="1" max="30" value="5">
+                <label for="waitTimeSpinner">Sek.</label>
+            </div>
         </div>
-        <input type="number" id="waitTimeSpinner" min="1" max="30" value="5">
-        <label for="waitTimeSpinner">Sek.</label>
         <form id="refreshForm" method="POST" action="/" style="display:none;">
             <input type="hidden" name="password" value="{{ .Password }}" />
         </form>
