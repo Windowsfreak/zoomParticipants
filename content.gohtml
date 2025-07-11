@@ -96,11 +96,12 @@
         .participant.added {
             opacity: 0;
             transform: translateY(10px);
-            animation: fadeIn 0.3s forwards;
+            animation: fadeIn 1s forwards;
         }
         .participant.removed {
+            text-decoration: line-through;
             opacity: 1;
-            animation: fadeOut 0.3s forwards;
+            animation: fadeOut 1s forwards;
         }
         @keyframes fadeIn {
             to { opacity: 1; transform: translateY(0); }
@@ -357,8 +358,10 @@
                 if (update.participants) {
                     update.participants.forEach(name => addParticipant(name));
                 }
+                renumberParticipants();
             } else if (update.action === 'add') {
                 addParticipant(update.name);
+                renumberParticipants();
             } else if (update.action === 'remove') {
                 removeParticipant(update.name);
             }
@@ -369,16 +372,36 @@
             const div = document.createElement('div');
             div.className = 'participant added';
             div.textContent = name;
+            div.appendChild(document.createElement('span'));
             container.appendChild(div);
             setTimeout(() => div.classList.remove('added'), 1000);
         }
 
         function removeParticipant(name) {
-            const div = Array.from(container.children).findLast(el => el.textContent === name);
+            const div = Array.from(container.children).findLast(el => {
+                const textNodes = Array.from(el.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
+                if (textNodes.length > 0) {
+                    return textNodes[0].textContent.trim() === name;
+                }
+                return false;
+            });
             if (div) {
                 div.classList.add('removed');
-                div.addEventListener('animationend', () => div.remove());
+                div.addEventListener('animationend', () => {
+                    div.remove()
+                    renumberParticipants();
+                });
             }
+        }
+
+        function renumberParticipants() {
+            const participants = document.querySelectorAll('.participant');
+            participants.forEach((part, index) => {
+                const span = part.querySelector('span');
+                if (span) {
+                    span.textContent = `${index + 1}. `;
+                }
+            });
         }
 
         ws.onclose = () => {
