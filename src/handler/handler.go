@@ -143,6 +143,8 @@ func handleParticipantJoined(payload ZoomWebhookPayload, accountID string) {
 	meeting := appState.Meetings[accountID][meetingUUID]
 	meeting.Participants[uniqueID] = displayName
 	meeting.LastUpdated = time.Now()
+
+	broadcastJoined(accountID, displayName)
 }
 
 // handleParticipantLeft removes a participant from the meeting data
@@ -161,6 +163,7 @@ func handleParticipantLeft(payload ZoomWebhookPayload, accountID string) {
 	if meeting, exists := appState.Meetings[accountID][meetingUUID]; exists {
 		delete(meeting.Participants, uniqueID)
 		meeting.LastUpdated = time.Now()
+		broadcastLeft(accountID, participant.UserName)
 	}
 }
 
@@ -175,6 +178,7 @@ func handleMeetingEnded(payload ZoomWebhookPayload, accountID string) {
 	if meeting, exists := appState.Meetings[accountID][meetingUUID]; exists {
 		meeting.Participants = make(map[string]string)
 		meeting.LastUpdated = time.Now()
+		broadcastParticipants(accountID, meeting.Participants)
 	}
 }
 
@@ -211,18 +215,7 @@ func webhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 	}
 
 	// Initialize or get account-specific mutex (using password mutex for initialization)
-	appState.PasswordMutex.Lock()
-	if _, exists := appState.AccountMutexes[accountID]; !exists {
-		appState.AccountMutexes[accountID] = &sync.RWMutex{}
-		appState.Meetings[accountID] = make(map[string]*MeetingData)
-		// Fetch viewer password to populate PasswordToAccountID map
-		var viewerPassword string
-		err := appState.DB.QueryRow("SELECT viewer_password FROM accounts WHERE account_id = ?", accountID).Scan(&viewerPassword)
-		if err == nil {
-			appState.PasswordToAccountID[viewerPassword] = accountID
-		}
-	}
-	appState.PasswordMutex.Unlock()
+	ensureAccountInitialized(accountID)
 
 	// Process event with account-specific lock
 	switch payload.Event {
@@ -240,6 +233,20 @@ func webhookHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params)
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func ensureAccountInitialized(accountID string) {
+	appState.PasswordMutex.Lock()
+	defer appState.PasswordMutex.Unlock()
+	if _, exists := appState.AccountMutexes[accountID]; !exists {
+		appState.AccountMutexes[accountID] = &sync.RWMutex{}
+		appState.Meetings[accountID] = make(map[string]*MeetingData)
+		var viewerPassword string
+		err := appState.DB.QueryRow("SELECT viewer_password FROM accounts WHERE account_id = ?", accountID).Scan(&viewerPassword)
+		if err == nil {
+			appState.PasswordToAccountID[viewerPassword] = accountID
+		}
+	}
 }
 
 // addAccountHandler handles adding a new account
@@ -414,6 +421,7 @@ func SetupHandlers(router *httprouter.Router, db *sql.DB) {
 	router.POST("/webhook", webhookHandler)
 	router.GET("/", viewParticipantsHandler)
 	router.POST("/", viewParticipantsHandler)
+	router.GET("/ws", wsHandler)
 	router.POST("/add-account", addAccountHandler)
 	router.GET("/test", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		renderTemplate(w, true, []string{
@@ -456,4 +464,57 @@ func SetupHandlers(router *httprouter.Router, db *sql.DB) {
 
 	// Start cleanup routine
 	go cleanupOldMeetings()
+
+	go addRandomParticipants()
+}
+
+func addRandomParticipants() {
+	var number = 1
+	for {
+		time.Sleep(10 * time.Second)
+		ensureAccountInitialized("demodemodemodemo")
+		handleParticipantJoined(ZoomWebhookPayload{
+			Event: "meeting.participant_joined",
+			Payload: struct {
+				AccountID string `json:"account_id"`
+				Object    struct {
+					ID          string `json:"id"`
+					UUID        string `json:"uuid"`
+					Topic       string `json:"topic"`
+					Participant struct {
+						UserID   string `json:"user_id"`
+						UserName string `json:"user_name"`
+						Email    string `json:"email"`
+					} `json:"participant"`
+				} `json:"object"`
+				PlainToken string `json:"plainToken"`
+			}{
+				AccountID: "demodemodemodemo",
+				Object: struct {
+					ID          string `json:"id"`
+					UUID        string `json:"uuid"`
+					Topic       string `json:"topic"`
+					Participant struct {
+						UserID   string `json:"user_id"`
+						UserName string `json:"user_name"`
+						Email    string `json:"email"`
+					} `json:"participant"`
+				}{
+					ID:    "demo-meeting",
+					UUID:  "demo-uuid",
+					Topic: "Demo Meeting",
+					Participant: struct {
+						UserID   string `json:"user_id"`
+						UserName string `json:"user_name"`
+						Email    string `json:"email"`
+					}{
+						UserID:   fmt.Sprintf("user-%d", number),
+						UserName: fmt.Sprintf("Random User %d", number),
+						Email:    fmt.Sprintf("demo@user%d.example.com", number),
+					},
+				},
+			},
+		}, "demodemodemodemo")
+		number += 1
+	}
 }

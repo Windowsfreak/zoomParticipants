@@ -91,7 +91,22 @@
             overflow: hidden;
             text-overflow: ellipsis;
             position: relative;
-            transition: transform 0.5s ease, background-color 0.5s ease;
+            transition: transform 0.5s ease, background-color 0.5s ease, opacity 0.3s ease;
+        }
+        .participant.added {
+            opacity: 0;
+            transform: translateY(10px);
+            animation: fadeIn 0.3s forwards;
+        }
+        .participant.removed {
+            opacity: 1;
+            animation: fadeOut 0.3s forwards;
+        }
+        @keyframes fadeIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateY(-10px); }
         }
         .participant span {
             user-select: none;
@@ -323,6 +338,56 @@
                 myWinner.classList.remove('blinking');
             }, 5000);
         }
+
+        const viewerPassword = document.getElementsByName('password')[0].value;
+        const ws = new WebSocket(`ws://${window.location.host}/ws?password=${encodeURIComponent(viewerPassword)}`);
+
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+        };
+
+        ws.onmessage = (event) => {
+            const update = JSON.parse(event.data);
+            container = document.querySelector('.participants-container');
+
+            if (update.action === 'reset') {
+                // Clear and rebuild for full resets (e.g., meeting ended)
+                container.innerHTML = '';
+                if (update.participants) {
+                    update.participants.forEach(name => addParticipant(name));
+                }
+            } else if (update.action === 'add') {
+                addParticipant(update.name);
+            } else if (update.action === 'remove') {
+                removeParticipant(update.name);
+            }
+        };
+
+        function addParticipant(name) {
+            const div = document.createElement('div');
+            div.className = 'participant added';
+            div.textContent = name;
+            container.appendChild(div);
+            setTimeout(() => div.classList.remove('added'), 1000);
+        }
+
+        function removeParticipant(name) {
+            const div = Array.from(container.children).findLast(el => el.textContent === name);
+            if (div) {
+                div.classList.add('removed');
+                div.addEventListener('animationend', () => div.remove());
+            }
+        }
+
+        ws.onclose = () => {
+            console.log('WebSocket closed');
+        };
+
+        setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send('keepalive');
+            }
+        }, 30000);
     </script>
     {{ else }}
     <div class="password-form">
